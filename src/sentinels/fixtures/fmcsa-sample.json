@@ -1,0 +1,62 @@
+[
+  {
+    "dot_number": "4128871",
+    "docket_number": "MC-1623344",
+    "legal_name": "RIDGELINE HAULERS LLC",
+    "dba_name": "Ridgeline Freight",
+    "authority_granted_date": "2026-06-09",
+    "authority_type": "Common",
+    "phy_city": "Fort Worth",
+    "phy_state": "TX",
+    "power_units": 4,
+    "drivers": 5,
+    "email": "dispatch@ridgelinefreight.com",
+    "operation_classification": "Authorized For Hire",
+    "cargo_carried": ["General Freight", "Building Materials"]
+  },
+  {
+    "dot_number": "4129002",
+    "docket_number": "MC-1623501",
+    "legal_name": "SUNBELT REEFER TRANSPORT INC",
+    "dba_name": null,
+    "authority_granted_date": "2026-06-09",
+    "authority_type": "Common",
+    "phy_city": "Lakeland",
+    "phy_state": "FL",
+    "power_units": 9,
+    "drivers": 11,
+    "email": "ops@sunbeltreefer.com",
+    "operation_classification": "Authorized For Hire",
+    "cargo_carried": ["Refrigerated Food", "Fresh Produce"]
+  },
+  {
+    "dot_number": "4129140",
+    "docket_number": "MC-1623688",
+    "legal_name": "GARZA OWNER OPERATOR",
+    "dba_name": null,
+    "authority_granted_date": "2026-06-08",
+    "authority_type": "Common",
+    "phy_city": "Laredo",
+    "phy_state": "TX",
+    "power_units": 1,
+    "drivers": 1,
+    "email": "miguel.garza@gmail.com",
+    "operation_classification": "Authorized For Hire",
+    "cargo_carried": ["General Freight"]
+  },
+  {
+    "dot_number": "4129233",
+    "docket_number": "MC-1623712",
+    "legal_name": "APEX REGIONAL CARRIERS LLC",
+    "dba_name": "Apex Regional",
+    "authority_granted_date": "2026-06-08",
+    "authority_type": "Contract",
+    "phy_city": "Columbus",
+    "phy_state": "OH",
+    "power_units": 22,
+    "drivers": 27,
+    "email": "carriers@apexregional.com",
+    "operation_classification": "Authorized For Hire",
+    "cargo_carried": ["General Freight", "Metal Sheets, Coils, Rolls"]
+  }
+]

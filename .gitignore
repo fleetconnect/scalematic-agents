@@ -1,0 +1,13 @@
+node_modules/
+dist/
+data/
+.env
+.env.*
+!.env.example
+.mcp.json
+*.log
+.DS_Store
+**/.DS_Store
+*.tmp.ts
+*.sqlite
+*.sqlite3
