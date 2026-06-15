@@ -38,8 +38,13 @@ logger.info(
 );
 
 // ── Express server ─────────────────────────────────────────────────
+const allowedOrigins = (process.env.ALLOWED_ORIGIN ?? 'http://localhost:4100')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
+
 const app = express();
-app.use(cors());
+app.use(cors({ origin: allowedOrigins }));
 app.use(express.json({ limit: '10mb' }));
 app.use('/api', router);
 
