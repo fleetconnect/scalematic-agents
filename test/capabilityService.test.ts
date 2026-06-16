@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildCapabilities, CapabilityEnv } from '../src/capabilities/capabilityService';
+import { buildCapabilities, CapabilityEnv, FilingProbe } from '../src/capabilities/capabilityService';
 import { VaultStatus } from '../src/types/vault';
 
 const availableVault: VaultStatus = {
@@ -12,8 +12,14 @@ const availableVault: VaultStatus = {
   reason: 'Vault reachable',
 };
 
-function cap(env: CapabilityEnv, vault: VaultStatus = availableVault) {
-  const map = buildCapabilities(env, vault);
+const healthyProbe: FilingProbe = {
+  conversationsWritable: true,
+  auditStoreOk: true,
+  diskPressureHigh: false,
+};
+
+function cap(env: CapabilityEnv, vault: VaultStatus = availableVault, probe: FilingProbe = healthyProbe) {
+  const map = buildCapabilities(env, vault, probe);
   const by: Record<string, string> = {};
   for (const c of map.capabilities) by[c.id] = c.state;
   return by;
@@ -60,4 +66,44 @@ test('every capability carries a non-empty reason and verifiedAt', () => {
     assert.ok(c.reason.length > 0, `${c.id} must have a reason`);
     assert.ok(c.verifiedAt.length > 0, `${c.id} must have verifiedAt`);
   }
+});
+
+test('conversation-filing: available when vault writable, audit ok, no disk pressure', () => {
+  const states = cap({});
+  assert.equal(states['conversation-filing'], 'available');
+});
+
+test('conversation-filing: degraded when host disk pressure exceeds threshold', () => {
+  const states = cap({}, availableVault, { conversationsWritable: true, auditStoreOk: true, diskPressureHigh: true });
+  assert.equal(states['conversation-filing'], 'degraded');
+});
+
+test('conversation-filing: degraded when the audit store is unavailable', () => {
+  const states = cap({}, availableVault, { conversationsWritable: true, auditStoreOk: false, diskPressureHigh: false });
+  assert.equal(states['conversation-filing'], 'degraded');
+});
+
+test('conversation-filing: blocked by policy when FILING_DISABLED=true', () => {
+  assert.equal(cap({ filingDisabled: 'true' })['conversation-filing'], 'blocked');
+});
+
+test('conversation-filing: blocked when 06 Conversations is not writable', () => {
+  const states = cap({}, availableVault, { conversationsWritable: false, auditStoreOk: true, diskPressureHigh: false });
+  assert.equal(states['conversation-filing'], 'blocked');
+});
+
+test('conversation-filing: not_configured when the vault root is absent', () => {
+  const noVault: VaultStatus = { configured: false, reachable: false, rootLabel: null, approvedFolders: [], state: 'not_configured', reason: 'no root' };
+  assert.equal(cap({}, noVault)['conversation-filing'], 'not_configured');
+});
+
+test('conversation-filing: blocked when the vault is unavailable (degraded/blocked)', () => {
+  const degradedVault: VaultStatus = { ...availableVault, state: 'degraded', reason: 'unreachable' };
+  assert.equal(cap({}, degradedVault)['conversation-filing'], 'blocked');
+});
+
+test('no false generic-write availability: vault-write stays not_configured even when filing is available', () => {
+  const states = cap({});
+  assert.equal(states['conversation-filing'], 'available');
+  assert.equal(states['vault-write'], 'not_configured');
 });
