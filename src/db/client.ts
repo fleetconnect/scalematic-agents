@@ -3,10 +3,14 @@ import path from 'path';
 import fs from 'fs';
 import { CREATE_TABLES } from './schema';
 
-const DATA_DIR = path.join(__dirname, '../../data');
-if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+// SCALEMATIC_DB overrides the database file (used by tests for isolation and by ops tooling).
+// Defaults to the canonical operational store under data/.
+const DB_PATH = process.env.SCALEMATIC_DB
+  ? path.resolve(process.env.SCALEMATIC_DB)
+  : path.join(__dirname, '../../data', 'scalematic.db');
 
-const DB_PATH = path.join(DATA_DIR, 'scalematic.db');
+const DATA_DIR = path.dirname(DB_PATH);
+if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
 let _db: Database.Database | null = null;
 

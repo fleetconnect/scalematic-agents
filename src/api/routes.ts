@@ -38,6 +38,8 @@ import {
 } from '../vault/vaultAdapter';
 import { VaultPathError } from '../vault/pathSafety';
 import { FrontmatterError } from '../vault/frontmatter';
+import { fileApprovedConversation } from '../vault/conversationFiling';
+import { FileConversationInput } from '../types/conversationFiling';
 import { getCapabilities } from '../capabilities/capabilityService';
 
 export const router = Router();
@@ -664,6 +666,24 @@ router.get('/vault/note', (req: Request, res: Response) => {
     res.json(readNote(pathParam));
   } catch (err) {
     sendVaultError(res, err);
+  }
+});
+
+// The only Plane-B (vault) write surface. Governed, approval-gated, idempotent, non-destructive.
+// Writes only into 06 Conversations. Returns a result envelope (created | already_exists |
+// needs_review | rejected | failed) — handled outcomes are 200; only malformed bodies are 400.
+router.post('/vault/conversations/file', (req: Request, res: Response) => {
+  try {
+    const body = req.body;
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      res.status(400).json({ error: 'Request body must be a JSON object' });
+      return;
+    }
+    const result = fileApprovedConversation(body as FileConversationInput);
+    res.json(result);
+  } catch (err) {
+    logger.error(`fileApprovedConversation failed: ${(err as Error).message}`);
+    res.status(500).json({ error: 'Internal error filing conversation' });
   }
 });
 

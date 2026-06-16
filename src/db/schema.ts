@@ -192,6 +192,23 @@ CREATE TABLE IF NOT EXISTS outcome_labels (
   created_at TEXT NOT NULL
 );
 
+-- Governed Plane-B (vault) write audit (Phase 2A). One row per fileApprovedConversation
+-- attempt, including rejected/failed. Stores fingerprint + title + relative path, never the body.
+CREATE TABLE IF NOT EXISTS conversation_filings (
+  id TEXT PRIMARY KEY,
+  command TEXT NOT NULL,
+  approval_reference TEXT NOT NULL,
+  idempotency_key TEXT,
+  content_fingerprint TEXT NOT NULL,
+  proposed_title TEXT NOT NULL,
+  final_relative_path TEXT,
+  duplicate_result TEXT NOT NULL,
+  verification TEXT NOT NULL,
+  outcome TEXT NOT NULL,
+  error TEXT,
+  created_at TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_tasks_agent ON tasks(assigned_agent);
 CREATE INDEX IF NOT EXISTS idx_approvals_status ON approvals(status);
@@ -209,4 +226,6 @@ CREATE INDEX IF NOT EXISTS idx_sends_status ON sends(status);
 CREATE INDEX IF NOT EXISTS idx_evalsets_opp ON evaluation_sets(opportunity_id);
 CREATE INDEX IF NOT EXISTS idx_declogs_subject ON decision_logs(subject_id);
 CREATE INDEX IF NOT EXISTS idx_outlabels_opp ON outcome_labels(opportunity_id);
+CREATE INDEX IF NOT EXISTS idx_filings_idem ON conversation_filings(idempotency_key);
+CREATE INDEX IF NOT EXISTS idx_filings_fp ON conversation_filings(content_fingerprint);
 `;
