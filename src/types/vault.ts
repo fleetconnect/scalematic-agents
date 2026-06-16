@@ -9,6 +9,10 @@ export interface VaultNoteSummary {
   folder: string;
   frontmatter: Record<string, unknown>;
   modifiedAt: string;
+  // Note-level frontmatter health. 'invalid' means the YAML could not be parsed and the metadata
+  // shown is filename-derived fallback, not confirmed frontmatter. Absent/'valid' = parsed cleanly.
+  frontmatterStatus?: 'valid' | 'invalid';
+  frontmatterError?: string;
 }
 
 export interface VaultNote extends VaultNoteSummary {
@@ -47,6 +51,9 @@ export interface ConversationSummary {
   people: string[];
   companies: string[];
   modifiedAt: string;
+  // 'invalid' means the note's frontmatter could not be parsed; date is filename-derived fallback
+  // and people/companies are empty (not confirmed). Absent/'valid' = parsed cleanly.
+  frontmatterStatus?: 'valid' | 'invalid';
 }
 
 export interface DailyNoteResult {

@@ -3,7 +3,8 @@ import path from 'path';
 import crypto from 'crypto';
 import { getDb } from '../db/client';
 import { getVaultRoot, FOLDER } from './vaultConfig';
-import { parseFrontmatter } from './frontmatter';
+import { tryParseFrontmatter, extractRawFrontmatterField } from './frontmatter';
+import { logger } from '../utils/logger';
 import { assertSafeRelativePath, toVaultRelative } from './pathSafety';
 import {
   FileConversationInput,
@@ -102,9 +103,15 @@ function audit(row: {
 interface ExistingNote {
   rel: string;
   sourceReference: string | null;
-  fingerprint: string;
+  contentHash: string | null; // our own notes carry content_hash in frontmatter
+  rawBodyHash: string; // sha256 of the body (frontmatter stripped) — works even for malformed notes
+  invalid: boolean;
 }
 
+// Scan every existing note for duplicate evidence. A note with malformed frontmatter must NOT
+// crash the scan and must NOT be skipped (skipping could hide an existing conversation and allow a
+// duplicate write). Malformed notes still contribute fallback evidence: source_reference extracted
+// from the raw frontmatter, and a raw-body content hash.
 function scanConversations(root: string, dir: string): ExistingNote[] {
   let entries: string[];
   try {
@@ -124,12 +131,23 @@ function scanConversations(root: string, dir: string): ExistingNote[] {
     }
     if (st.isSymbolicLink() || !st.isFile()) continue;
     const raw = fs.readFileSync(abs, 'utf-8');
-    const { frontmatter } = parseFrontmatter(raw);
-    const sr = frontmatter.source_reference;
+    const parsed = tryParseFrontmatter(raw);
+    const rel = toVaultRelative(root, abs);
+    if (!parsed.valid) {
+      logger.warn(`Duplicate scan: note has invalid frontmatter, using fallback evidence: ${rel}`);
+    }
+    const sr = parsed.valid
+      ? (typeof parsed.frontmatter.source_reference === 'string' ? parsed.frontmatter.source_reference.trim() : null)
+      : extractRawFrontmatterField(raw, 'source_reference');
     out.push({
-      rel: toVaultRelative(root, abs),
-      sourceReference: typeof sr === 'string' ? sr.trim() : null,
-      fingerprint: typeof frontmatter.content_hash === 'string' ? frontmatter.content_hash : '',
+      rel,
+      sourceReference: sr && sr.length ? sr : null,
+      contentHash:
+        parsed.valid && typeof parsed.frontmatter.content_hash === 'string'
+          ? parsed.frontmatter.content_hash
+          : null,
+      rawBodyHash: sha256(parsed.body.trim()),
+      invalid: !parsed.valid,
     });
   }
   return out;
@@ -251,8 +269,11 @@ export function fileApprovedConversation(input: FileConversationInput): FileConv
   // Target filename already taken: same content = idempotent already_exists; different = collision.
   if (fs.existsSync(finalAbs)) {
     const raw = fs.readFileSync(finalAbs, 'utf-8');
-    const { frontmatter: existingFm } = parseFrontmatter(raw);
-    if (existingFm.content_hash === fingerprint) {
+    const parsedExisting = tryParseFrontmatter(raw);
+    const existingMatches =
+      parsedExisting.frontmatter.content_hash === fingerprint ||
+      sha256(parsedExisting.body.trim()) === fingerprint;
+    if (existingMatches) {
       const auditId = audit({
         approvalReference: input.approvalReference,
         idempotencyKey: input.idempotencyKey,
@@ -268,10 +289,12 @@ export function fileApprovedConversation(input: FileConversationInput): FileConv
   }
 
   // Same source reference, or identical body content elsewhere → human decides (never overwrite).
+  // Malformed notes still match via rawBodyHash and extracted source_reference (no skip).
   const srcRef = (input.sourceReference ?? '').trim();
   for (const n of existing) {
     if (srcRef && n.sourceReference && n.sourceReference === srcRef) candidates.add(n.rel);
-    if (n.fingerprint === fingerprint) candidates.add(n.rel);
+    if (n.contentHash === fingerprint) candidates.add(n.rel);
+    if (n.rawBodyHash === fingerprint) candidates.add(n.rel);
   }
 
   if (candidates.size > 0) {
@@ -354,9 +377,13 @@ export function fileApprovedConversation(input: FileConversationInput): FileConv
 
     const readBack = fs.readFileSync(finalAbs, 'utf-8');
     const hashOk = sha256(readBack) === sha256(content);
-    const { frontmatter } = parseFrontmatter(readBack);
-    const dateOk = typeof frontmatter.date === 'string' || frontmatter.date instanceof Date;
-    const fmOk = frontmatter.type === 'conversation' && dateOk && Boolean(frontmatter.review_status);
+    const verify = tryParseFrontmatter(readBack);
+    const dateOk = typeof verify.frontmatter.date === 'string' || verify.frontmatter.date instanceof Date;
+    const fmOk =
+      verify.valid &&
+      verify.frontmatter.type === 'conversation' &&
+      dateOk &&
+      Boolean(verify.frontmatter.review_status);
     const verified = hashOk && fmOk;
 
     const auditId = audit({

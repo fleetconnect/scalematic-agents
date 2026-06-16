@@ -14,9 +14,11 @@ import { APPROVED_FOLDERS, FOLDER, getVaultRoot } from './vaultConfig';
 import {
   asStringArray,
   asStringOrNull,
+  dateFromFilename,
   deriveTitle,
-  parseFrontmatter,
+  tryParseFrontmatter,
 } from './frontmatter';
+import { logger } from '../utils/logger';
 import {
   assertMarkdownPath,
   assertSafeRelativePath,
@@ -159,17 +161,32 @@ function collectMarkdownFiles(root: string, folder: string): string[] {
   return out;
 }
 
+// Bounded warning for malformed notes: log each affected vault-relative path once per process so a
+// single bad note does not flood logs on every request. Absolute paths are never logged.
+const warnedInvalidNotes = new Set<string>();
+function warnInvalidNote(rel: string, error?: string): void {
+  if (warnedInvalidNotes.has(rel)) return;
+  warnedInvalidNotes.add(rel);
+  logger.warn(`Vault note has invalid frontmatter; using fallback metadata: ${rel}${error ? ` (${error})` : ''}`);
+}
+
 function summarizeFile(root: string, absPath: string): VaultNoteSummary {
   const raw = fs.readFileSync(absPath, 'utf-8');
-  const { frontmatter, body } = parseFrontmatter(raw);
+  const parsed = tryParseFrontmatter(raw);
   const rel = toVaultRelative(root, absPath);
-  return {
+  const summary: VaultNoteSummary = {
     path: rel,
-    title: deriveTitle(frontmatter, body, absPath),
+    title: deriveTitle(parsed.frontmatter, parsed.body, absPath),
     folder: rel.split('/')[0] ?? '',
-    frontmatter,
+    frontmatter: parsed.frontmatter,
     modifiedAt: fs.statSync(absPath).mtime.toISOString(),
   };
+  if (!parsed.valid) {
+    warnInvalidNote(rel, parsed.error);
+    summary.frontmatterStatus = 'invalid';
+    summary.frontmatterError = 'Frontmatter could not be parsed; filename-derived fallback used';
+  }
+  return summary;
 }
 
 export function readNote(relativePath: string): VaultNote {
@@ -186,16 +203,22 @@ export function readNote(relativePath: string): VaultNote {
   if (!stat.isFile()) throw new VaultPathError(`Not a file: ${relativePath}`);
 
   const raw = fs.readFileSync(abs, 'utf-8');
-  const { frontmatter, body } = parseFrontmatter(raw);
+  const parsed = tryParseFrontmatter(raw);
   const rel = toVaultRelative(root, abs);
-  return {
+  const note: VaultNote = {
     path: rel,
-    title: deriveTitle(frontmatter, body, abs),
+    title: deriveTitle(parsed.frontmatter, parsed.body, abs),
     folder: rel.split('/')[0] ?? '',
-    frontmatter,
+    frontmatter: parsed.frontmatter,
     modifiedAt: stat.mtime.toISOString(),
-    body,
+    body: parsed.body,
   };
+  if (!parsed.valid) {
+    warnInvalidNote(rel, parsed.error);
+    note.frontmatterStatus = 'invalid';
+    note.frontmatterError = 'Frontmatter could not be parsed; filename-derived fallback used';
+  }
+  return note;
 }
 
 function foldersToScan(folder?: string): string[] {
@@ -234,7 +257,9 @@ export function searchNotes(query: string, folder?: string, limit = 50): SearchH
   for (const f of foldersToScan(folder)) {
     for (const abs of collectMarkdownFiles(root, f)) {
       const raw = fs.readFileSync(abs, 'utf-8');
-      const { frontmatter, body } = parseFrontmatter(raw);
+      const parsed = tryParseFrontmatter(raw);
+      if (!parsed.valid) warnInvalidNote(toVaultRelative(root, abs), parsed.error);
+      const { frontmatter, body } = parsed;
       const title = deriveTitle(frontmatter, body, abs);
       const hayBody = body.toLowerCase();
       const hayTitle = title.toLowerCase();
@@ -304,14 +329,21 @@ export function goals(): GoalSet {
 export function conversations(): ConversationSummary[] {
   const notes = listNotes(FOLDER.conversations);
   return notes
-    .map((n) => ({
-      path: n.path,
-      title: n.title,
-      date: asStringOrNull(n.frontmatter.date),
-      people: asStringArray(n.frontmatter.people),
-      companies: asStringArray(n.frontmatter.companies),
-      modifiedAt: n.modifiedAt,
-    }))
+    .map((n) => {
+      const invalid = n.frontmatterStatus === 'invalid';
+      // For malformed notes, frontmatter is empty; fall back to the filename date and leave
+      // people/companies empty rather than presenting unconfirmed values.
+      const date = asStringOrNull(n.frontmatter.date) ?? (invalid ? dateFromFilename(n.path) : null);
+      return {
+        path: n.path,
+        title: n.title,
+        date,
+        people: asStringArray(n.frontmatter.people),
+        companies: asStringArray(n.frontmatter.companies),
+        modifiedAt: n.modifiedAt,
+        ...(invalid ? { frontmatterStatus: 'invalid' as const } : {}),
+      };
+    })
     .sort((a, b) => (b.date ?? b.modifiedAt).localeCompare(a.date ?? a.modifiedAt));
 }
 
