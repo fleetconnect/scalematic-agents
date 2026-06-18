@@ -40,6 +40,9 @@ import { VaultPathError } from '../vault/pathSafety';
 import { FrontmatterError } from '../vault/frontmatter';
 import { fileApprovedConversation } from '../vault/conversationFiling';
 import { FileConversationInput } from '../types/conversationFiling';
+import { describeConnectors, describeConnectorById } from '../integrations/connectorRegistry';
+import { runMorningRevenueBrief } from '../integrations/morningRevenueBrief';
+import { ConnectorId } from '../types/integrations';
 import { getCapabilities } from '../capabilities/capabilityService';
 
 export const router = Router();
@@ -684,6 +687,35 @@ router.post('/vault/conversations/file', (req: Request, res: Response) => {
   } catch (err) {
     logger.error(`fileApprovedConversation failed: ${(err as Error).message}`);
     res.status(500).json({ error: 'Internal error filing conversation' });
+  }
+});
+
+// ── Integrations (read-only connector state + morning brief) ───────
+// No secrets are returned; descriptors carry capability/auth state and last-sync only.
+router.get('/integrations', (_req: Request, res: Response) => {
+  try {
+    res.json({ connectors: describeConnectors() });
+  } catch (err) {
+    logger.error(`integrations list failed: ${(err as Error).message}`);
+    res.status(500).json({ error: 'Internal error listing integrations' });
+  }
+});
+
+router.get('/integrations/:id', (req: Request, res: Response) => {
+  const d = describeConnectorById(req.params.id as ConnectorId);
+  if (!d) {
+    res.status(404).json({ error: 'Unknown connector' });
+    return;
+  }
+  res.json(d);
+});
+
+router.get('/morning-brief', async (_req: Request, res: Response) => {
+  try {
+    res.json(await runMorningRevenueBrief());
+  } catch (err) {
+    logger.error(`morning brief failed: ${(err as Error).message}`);
+    res.status(500).json({ error: 'Internal error building morning brief' });
   }
 });
 

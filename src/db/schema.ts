@@ -209,6 +209,31 @@ CREATE TABLE IF NOT EXISTS conversation_filings (
   created_at TEXT NOT NULL
 );
 
+-- Read-first integration audit (Phase 1+). One row per external connector access. Stores source
+-- ids and freshness, never tokens or full sensitive content. approval_reference is set only for
+-- future approved writes (Phase 1 is read-only, so it stays null).
+CREATE TABLE IF NOT EXISTS integration_access_log (
+  id TEXT PRIMARY KEY,
+  connector_id TEXT NOT NULL,
+  operation TEXT NOT NULL,
+  source_ids TEXT NOT NULL DEFAULT '[]',
+  result TEXT NOT NULL,
+  error TEXT,
+  data_freshness TEXT,
+  approval_reference TEXT,
+  created_at TEXT NOT NULL
+);
+
+-- Last sync state per connector (last successful / attempted sync, freshness, last error).
+CREATE TABLE IF NOT EXISTS integration_sync_state (
+  connector_id TEXT PRIMARY KEY,
+  last_successful_sync TEXT,
+  last_attempted_sync TEXT,
+  last_freshness TEXT,
+  last_error TEXT,
+  updated_at TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_tasks_agent ON tasks(assigned_agent);
 CREATE INDEX IF NOT EXISTS idx_approvals_status ON approvals(status);
@@ -226,6 +251,7 @@ CREATE INDEX IF NOT EXISTS idx_sends_status ON sends(status);
 CREATE INDEX IF NOT EXISTS idx_evalsets_opp ON evaluation_sets(opportunity_id);
 CREATE INDEX IF NOT EXISTS idx_declogs_subject ON decision_logs(subject_id);
 CREATE INDEX IF NOT EXISTS idx_outlabels_opp ON outcome_labels(opportunity_id);
+CREATE INDEX IF NOT EXISTS idx_intlog_connector ON integration_access_log(connector_id);
 CREATE INDEX IF NOT EXISTS idx_filings_idem ON conversation_filings(idempotency_key);
 CREATE INDEX IF NOT EXISTS idx_filings_fp ON conversation_filings(content_fingerprint);
 `;
